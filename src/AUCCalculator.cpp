@@ -3,20 +3,21 @@
 
 namespace AUCCalculator
 {
-    void generate_peak_data(double xi, double yi, std::vector<double>& peak_x, std::vector<double>& peak_y)
+    void generate_peak_data(double xi, double yi, double area, std::vector<double>& peak_x, std::vector<double>& peak_y)
     {
         peak_x.resize(100);
         peak_y.resize(100);
         
-        double start_x = xi - 0.02;
-        double end_x = xi + 0.02;
+        double sigma = 0.003 + (area / 70000.0);
+        double start_x = xi - 4.0 * sigma;
+        double end_x = xi + 4.0 * sigma;
         double step = (end_x - start_x) / 99.0; // 100 points means 99 intervals
         
         for (int i = 0; i < 100; ++i)
         {
             double cur_x = start_x + i * step;
             double diff = cur_x - xi;
-            double cur_y = yi * std::exp(-(diff * diff) / (2.0 * 0.005 * 0.005));
+            double cur_y = yi * std::exp(-(diff * diff) / (2.0 * sigma * sigma));
             peak_x[i] = cur_x;
             peak_y[i] = cur_y;
         }

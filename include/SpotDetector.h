@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <onnxruntime_cxx_api.h>
+#include <opencv2/opencv.hpp>
 
 struct Spot
 {
@@ -18,7 +19,7 @@ class SpotDetector
 {
 public:
     SpotDetector(const std::wstring& modelPath);
-    std::vector<Spot> detect(const std::string& imagePath);
+    std::vector<Spot> detect(const cv::Mat& image, float confThreshold = 0.0009f, float iouThreshold = 0.45f);
 
 private:
     Ort::Env env;

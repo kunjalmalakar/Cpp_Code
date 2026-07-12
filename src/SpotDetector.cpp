@@ -12,14 +12,13 @@ SpotDetector::SpotDetector(const std::wstring& modelPath)
 {
 }
 
-std::vector<Spot> SpotDetector::detect(const std::string& imagePath)
+std::vector<Spot> SpotDetector::detect(const cv::Mat& image, float confThreshold, float iouThreshold)
 {
     std::vector<Spot> detections;
 
-    cv::Mat image = cv::imread(imagePath);
     if (image.empty())
     {
-        std::cerr << "Error: Could not read image " << imagePath << std::endl;
+        std::cerr << "Error: Input image is empty" << std::endl;
         return detections;
     }
 
@@ -90,22 +89,31 @@ std::vector<Spot> SpotDetector::detect(const std::string& imagePath)
 
     float* output = outputTensors[0].GetTensorMutableData<float>();
 
+    // Dynamically retrieve output tensor shape to handle arbitrary classes (nc)
+    Ort::TypeInfo outputTypeInfo = session.GetOutputTypeInfo(0);
+    auto outputTensorInfo = outputTypeInfo.GetTensorTypeAndShapeInfo();
+    std::vector<int64_t> outputShape = outputTensorInfo.GetShape();
+
+    // For YOLOv8, output shape is typically {1, 4 + nc, 8400}
+    int64_t num_channels = outputShape[1];
+    int64_t num_anchors = outputShape[2];
+
     std::vector<cv::Rect> bboxes;
     std::vector<float> confidences;
     std::vector<int> classIds;
 
-    for (int i = 0; i < 8400; ++i)
+    for (int i = 0; i < num_anchors; ++i)
     {
-        float cx = output[0 * 8400 + i];
-        float cy = output[1 * 8400 + i];
-        float w  = output[2 * 8400 + i];
-        float h  = output[3 * 8400 + i];
+        float cx = output[0 * num_anchors + i];
+        float cy = output[1 * num_anchors + i];
+        float w  = output[2 * num_anchors + i];
+        float h  = output[3 * num_anchors + i];
 
         float max_score = 0.0f;
         int class_id = 0;
-        for (int c = 4; c < 84; ++c)
+        for (int c = 4; c < num_channels; ++c)
         {
-            float score = output[c * 8400 + i];
+            float score = output[c * num_anchors + i];
             if (score > max_score)
             {
                 max_score = score;
@@ -113,7 +121,7 @@ std::vector<Spot> SpotDetector::detect(const std::string& imagePath)
             }
         }
 
-        if (class_id == 0 && max_score >= 0.0009f)
+        if (max_score >= confThreshold)
         {
             // Scale back coordinates: subtract padding and divide by ratio
             float cx_orig = (cx - left) / r;
@@ -136,7 +144,7 @@ std::vector<Spot> SpotDetector::detect(const std::string& imagePath)
     }
 
     std::vector<int> indices;
-    cv::dnn::NMSBoxes(bboxes, confidences, 0.0009f, 0.45f, indices);
+    cv::dnn::NMSBoxes(bboxes, confidences, confThreshold, iouThreshold, indices);
 
     for (int idx : indices)
     {
